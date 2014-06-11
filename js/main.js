@@ -18,13 +18,72 @@ $(document).ready(function () {
         if (window.innerWidth > tabletBreak) {
             var tableWidth = window.innerWidth - parseInt($('.livechart').attr('width')) - parseInt(table.css('margin-right')) - 15;
             table.css('width', tableWidth);
-            $('#export').css('margin-right', 30 + (tableWidth / 4 ) - 48); // margin to right of table + 1/4 of 
+            $('#export').css('margin-right', 30 + (tableWidth / 4) - 48); // margin to right of table + 1/4 of 
             $('#import').css('margin-right', (tableWidth / 2) - 96);
         } else {
-            $('#export').css('margin-right','');
-            $('#import').css('margin-right','');
+            $('#export').css('margin-right', '');
+            $('#import').css('margin-right', '');
             table.css('width', '85%');
         }
+    }
+
+    var tableEvents = function () {
+        // Set up event handlers on the chart to improve contentEditable
+        $('td')
+            .off()
+            .on('click', function () {
+                var $this = $(this);
+                if (!($this.hasClass('selected'))) {
+                    document.execCommand('selectAll', false, null);
+                    $this.addClass('selected');
+                    $this.on('blur', function () {
+                        $(this).removeClass('selected');
+                    });
+                }
+            })
+            .keydown(function (objEvent) {
+                var $this = $(this),
+                    col = $this.parent().children().index($this) + 1, // 1-index these because nth-child() is 1-indexed
+                    row = $this.parent().parent().children().index($this.parent()) + 1,
+                    prevRow = row - 1,
+                    nextRow = row + 1;
+
+                if (objEvent.shiftKey && objEvent.keyCode == 9) {
+                    objEvent.preventDefault();
+                    if (col == 1 && prevRow > 0) {
+                        $('tr:nth-child(' + prevRow + ') td:nth-child(4)').focus();
+                    } else {
+                        $this.prev('td').focus();
+                    }
+                    $this.prev('td').focus();
+                    document.execCommand('selectAll', false, null);
+                } else if (objEvent.keyCode == 9) {
+                    objEvent.preventDefault();
+                    if (col == 4) {
+                        $('tr:nth-child(' + nextRow + ') td:nth-child(1)').focus();
+                    } else {
+                        $this.next('td').focus();
+                    }
+                    document.execCommand('selectAll', false, null);
+                }
+            })
+            .keydown(function (objEvent) {
+                var $this = $(this),
+                    col = $this.parent().children().index($this) + 1, // 1-index these because nth-child() is 1-indexed
+                    row = $this.parent().parent().children().index($this.parent()) + 1,
+                    prevRow = row - 1,
+                    nextRow = row + 1;
+
+                if (objEvent.shiftKey && objEvent.keyCode == 13) {
+                    objEvent.preventDefault();
+                    $('tr:nth-child(' + prevRow + ') td:nth-child(' + col + ')').focus();
+                    document.execCommand('selectAll', false, null);
+                } else if (objEvent.keyCode == 13) {
+                    objEvent.preventDefault();
+                    $('tr:nth-child(' + nextRow + ') td:nth-child(' + col + ')').focus();
+                    document.execCommand('selectAll', false, null);
+                }
+            });
     }
 
     // d3 Utility Functions
@@ -57,6 +116,11 @@ $(document).ready(function () {
         return d.size;
     };
 
+    // Random number between two values
+    function getRandomMinMax(min, max) {
+        return Math.round( (Math.random() * (max - min) + min) * 10 ) / 10;
+    }
+    
     // Function to gather data from the ediTable
     // TODO use a csv parser instead of hard-coding
     var getDataFromTable = function (table) {
@@ -356,12 +420,14 @@ $(document).ready(function () {
         } else {
             $table.append('<tr>\
                 <td class="epic" contenteditable="true">Add new task here...</td>\
-                <td class="value" contenteditable="true">0</td>\
-                <td class="value" contenteditable="true">0</td>\
-                <td class="value" contenteditable="true">0</td>\
+                <td class="value" contenteditable="true">' + getRandomMinMax(0, 10) + '</td>\
+                <td class="value" contenteditable="true">' + getRandomMinMax(0, 10) + '</td>\
+                <td class="value" contenteditable="true">' + getRandomMinMax(0, 5) + '</td>\
                 </tr>');
         }
         newDot();
+        tableEvents();
+        updateDots(getDataFromTable('.ediTable'));
     };
 
     var deleteRow = function ($table) {
@@ -422,7 +488,7 @@ $(document).ready(function () {
     });
 
     $('#import').click(function () {
-        d3.csv("epics.csv", function (d) {
+        d3.csv("sample-data.csv", function (d) {
             return {
                 epic: d.Epic,
                 urgency: +d.Urgency,
@@ -433,23 +499,6 @@ $(document).ready(function () {
             pushDataToTable('.ediTable', rows);
             updateDots(rows);
         });
-    });
-
-    $('#sample').click(function () {
-        // Load sample-data.csv for demo purposes
-        d3.csv("sample-data.csv", function (d) {
-            return {
-                epic: d.Epic,
-                urgency: +d.Urgency,
-                importance: +d.Importance,
-                size: +d.Size // convert "Length" column to number
-            };
-        }, function (error, rows) {
-            pushDataToTable('.ediTable', rows);
-            updateDots(getDataFromTable('.ediTable'));
-            console.log("sample-data.csv pushed to table");
-        });
-        console.log("loaded from sample-data.csv");
     });
 
     // Update dots when table is edited or loses focus
@@ -474,9 +523,11 @@ $(document).ready(function () {
         $table.html(localStorage.getItem('ediTable'));
         updateDots(getDataFromTable('.ediTable'));
         console.log("loaded from local storage")
+        tableEvents();
     } else {
         newRow($table);
     }
+
     // Init chart, return SVG object for main chart building (and updating later)
     var init = function () {
         if (window.innerWidth <= tabletBreak) {
